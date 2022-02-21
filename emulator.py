@@ -36,11 +36,12 @@ for argument in sys.argv:
             config[key] = value
 
 def printUsage():
-    print("Usage:  "+sys.argv[0]+" in=value out=value [key=value ...]")
-    print("        in     Local UDP port to receive packets from (mandatory)")
-    print("        out    Local UDP port to send packets to (mandatory)")
-    print("        delay  Forwarding delay in seconds (default: 0.0)")
-    print("        per    Packet error rate (default: 0.0)")
+    print("Usage:   "+sys.argv[0]+" in=value out=value [key=value ...]")
+    print("         in     Local UDP port to receive packets from (mandatory)")
+    print("         out    Local UDP port to send packets to (mandatory)")
+    print("         delay  Forwarding delay in seconds >=0 (default: 0.0)")
+    print("         per    Packet error rate 0...1 (default: 0.0)")
+    print("Example: "+sys.argv[0]+" in=1111 out=2222 delay=0.1")
 
 # ensure mandatory configuration options are set
 if config['in'] == None or config['out'] == None:

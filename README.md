@@ -56,11 +56,11 @@ Adding rule to handle packets from eth0...
 Adding rule to handle packets from eth1...
 Adding route to pass packets to emueth0eth1...
 Ready. Running until SIGINT (Ctrl+C) is received.
-Caught SIGINT, cleaning up...
-Done.
 ```
 
 Let's say `eth0` has the subnet `10.0.1.0/24` assigned and `eth1` has subnet `10.0.2.0/24`. Alice is reachable by address `10.0.1.10` and Bob by `10.0.2.10`. The router in the middle uses addresses `10.0.1.1` and `10.0.2.1`. If Alice and Bob have set the router's addresses as their default gateway, a packet from Alice to Bob or from Bob to Alice will end up at the router. Now, if Alice pings Bob, her ICMP packets would arrive at the router on `eth0` and get passed through the TUN device to local UDP port 1111. If `socat` receives Alice's packets back on UDP port 2222, they will finally leave the router through `eth1` and reach Bob. The reverse path from Bob to Alice works the same way; packets come in on `eth1`, reach the emulator on port 1111, should be returned to port 2222 and leave through `eth0`.
+
+Pressing Ctrl+C will cause the script to undo the routing configuration and exit.
 
 ### Internals
 

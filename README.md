@@ -80,7 +80,7 @@ Usage:   ./emulator.py in=value out=value [key=value ...]
 Example: ./emulator.py in=1111 out=2222 delay=0.1
 ```
 
-The UDP ports should of course match those specified for [routing.sh](routing.sh). The configured delay causes fixed latency to be added. Packet errors are realized by randomly dropping (i.e., not forwarding) packets; the desired rate is met by dropping packets only if a random uniform number between 0 and 1 exceeds the configured value. Both delay and packet error rate parameters are parsed as float.
+The UDP ports should of course match those specified for [routing.sh](routing.sh). The configured delay causes fixed latency to be added. Packet errors are realized by randomly dropping (i.e., not forwarding) packets; the desired rate is met by comparing a random uniform number between 0 and 1 to the configured value and only forwarding a packet if that value is exceeded. Both delay and packet error rate parameters are parsed as float.
 
 Given the following baseline ICMP ping statistics between to virtual machines:
 

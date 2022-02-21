@@ -79,7 +79,7 @@ On exit, the script will reverse any routing changes made. However, if that fail
 
 ## Emulator
 
-As of now, fixed per-packet delays, limited bandwidth and packet errors can be emulated. Note that the currently included Python3 script [emulator.py](emulator.py) serves as a minimal application example and placeholder for more sophisticated model-based emulation. Since asynchronous I/O using `asyncio` is a pain in Python and voids the purpose of providing an easy-to-read example, the script reads and writes packets synchronously. Beware that this effectively creates a half-duplex link where new incoming packets are only processed once the previous has left the emulator. Also, this adds jitter and should not be used to emulate low latency connections. Improved implementations may be included in the future.
+The emulator is meant to be run in a separate terminal after the routing has been set up. As of now, fixed per-packet delays, limited bandwidth and packet errors can be emulated. Note that the currently included Python3 script [emulator.py](emulator.py) serves as a minimal application example and placeholder for more sophisticated model-based emulation. Since asynchronous I/O using `asyncio` is a pain in Python and voids the purpose of providing an easy-to-understand example, the script reads and writes packets synchronously. Beware that this effectively creates a half-duplex first-in first-out link where incoming packets are only processed once the previous has left the emulator. Not being able to read a packet right when it arrives adds load-dependent delays (jitter); this will limit suitability for emulating low-latency connections. Improved asynchronous implementations may be included in the future.
 
 ### Usage
 

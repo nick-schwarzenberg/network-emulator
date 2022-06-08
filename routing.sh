@@ -44,7 +44,7 @@ if [[ $INTERFACES == "" ]]; then
 fi
 INTERFACES_ARRAY=(${INTERFACES//,/ })  # replace commas by spaces and interpret as array
 for INTERFACE in ${INTERFACES_ARRAY[@]}; do
-	ip link show $INTERFACE 2>&1 >/dev/null
+	ip link show $INTERFACE &>/dev/null
 	if [[ $? != 0 ]]; then
 		echo "$INTERFACE does not seem to be a valid network interface."
 		echo "Available interfaces:"
@@ -67,8 +67,43 @@ if [[ $OUT_PORT == "" ]]; then
 	exit 1
 fi
 
-# last optional argument sets TUN device name
+# last argument is TUN device name, although optional
 TUN_DEVICE=$4
+
+# make TUN device name if not set already
+if [[ $TUN_DEVICE == "" ]]; then
+	TUN_PREFIX="emu"
+	TUN_DEVICE="$TUN_PREFIX${INTERFACES//,/}"  # make joint name, removing commas from interface list
+fi
+
+# truncate to 15 characters (IFNAMSIZ is 16 in Linux)
+TUN_DEVICE="${TUN_DEVICE:0:15}"
+
+# check that TUN device name does not exist yet
+ip link show $TUN_DEVICE &>/dev/null
+if [[ $? == 0 ]]; then
+	echo "TUN device $TUN_DEVICE seems to exist already."
+	echo "Conflicting interface:"
+	ip link show $TUN_DEVICE
+	exit 1
+fi
+
+# find next free routing table ID
+for (( ID=100; ID<253; ID++ )); do
+	if [[ $(ip rule show | grep "lookup $ID") == "" ]]; then
+		TABLE_ID=$ID
+		break
+	fi
+done
+if [[ $TABLE_ID == "" ]]; then
+	echo "Could not find free routing table ID in range 100..252."
+	echo "Existing rules:"
+	ip rule show
+	exit 1
+fi
+
+
+## Actual routing setup ##
 
 # ensure that IP forwarding is enabled
 IP_FORWARD_ORIGINAL=$(sysctl --values net.ipv4.ip_forward)
@@ -81,35 +116,12 @@ else
 	echo "IPv4 forwarding is enabled."
 fi
 
-
-## Actual routing setup ##
-
-# make TUN device name if not set already
-if [[ $TUN_DEVICE == "" ]]; then
-	TUN_PREFIX="emu"
-	TUN_DEVICE="$TUN_PREFIX${INTERFACES//,/}"  # make joint name, removing commas from interface list
-fi
-
 # create TUN device
-TUN_DEVICE="${TUN_DEVICE:0:15}"  # truncate to 15 characters (IFNAMSIZ is 16 in Linux)
 echo "Creating TUN device $TUN_DEVICE for local packet manipulation..."
 socat tun,tun-name=$TUN_DEVICE,iff-up,iff-no-pi udp4-sendto:127.0.0.1:$IN_PORT,bind=127.0.0.1,sourceport=$OUT_PORT &
 SOCAT_PID=$!
 echo "socat running in background with PID $SOCAT_PID."
 echo "IP in UDP/IP is passed to local port $IN_PORT and expected back on local port $OUT_PORT."
-
-# find next free routing table ID
-for (( ID=100; ID<253; ID++ )); do
-	if [[ $(ip rule show | grep "lookup $ID") == "" ]]; then
-		TABLE_ID=$ID
-		break
-	fi
-done
-if [[ $TABLE_ID == "" ]]; then
-	echo "Could not find free ID for routing table!"
-	ip rule show
-	exit 1
-fi
 
 # create policy route for packets coming in from the specified interfaces
 for INTERFACE in ${INTERFACES_ARRAY[@]}; do

@@ -98,13 +98,25 @@ SOCAT_PID=$!
 echo "socat running in background with PID $SOCAT_PID."
 echo "IP in UDP/IP is passed to local port $IN_PORT and expected back on local port $OUT_PORT."
 
+# find next free routing table ID
+for (( ID=100; ID<253; ID++ )); do
+	if [[ $(ip rule show | grep "lookup $ID") == "" ]]; then
+		TABLE_ID=$ID
+		break
+	fi
+done
+if [[ $TABLE_ID == "" ]]; then
+	echo "Could not find free ID for routing table!"
+	ip rule show
+	exit 1
+fi
+
 # create policy route for packets coming in from the specified interfaces
-TABLE_ID=123
 for INTERFACE in ${INTERFACES_ARRAY[@]}; do
-	echo "Adding rule to handle packets from $INTERFACE..."
+	echo "Adding rule for table $TABLE_ID to handle packets from $INTERFACE..."
 	ip rule add iif $INTERFACE lookup $TABLE_ID
 done
-echo "Adding route to pass packets to $TUN_DEVICE..."
+echo "Adding route to pass packets from table $TABLE_ID to $TUN_DEVICE..."
 ip route add default dev $TUN_DEVICE table $TABLE_ID
 
 # handle SIGINT signal (e.g., from pressing Ctrl+C)

@@ -10,10 +10,11 @@
 
 print_usage()
 {
-	echo "Usage:   $0 INTERFACE IN_PORT OUT_PORT"
+	echo "Usage:   $0 INTERFACE IN_PORT OUT_PORT [TUN_DEVICE]"
 	echo "         INTERFACES  Redirect packets coming in from these comma-separated network interfaces."
 	echo "         IN_PORT     Local UDP port where incoming IP packets are sent to."
 	echo "         OUT_PORT    Local UDP port where outgoing IP packets must be sent to."
+	echo "         TUN_DEVICE  Name of TUN device to create, up to 15 characters. (optional)"
 	echo "Example: $0 eth0,eth1 1111 2222"
 }
 
@@ -66,6 +67,9 @@ if [[ $OUT_PORT == "" ]]; then
 	exit 1
 fi
 
+# last optional argument sets TUN device name
+TUN_DEVICE=$4
+
 # ensure that IP forwarding is enabled
 IP_FORWARD_ORIGINAL=$(sysctl --values net.ipv4.ip_forward)
 IP_FORWARD_CHANGED=0
@@ -80,9 +84,13 @@ fi
 
 ## Actual routing setup ##
 
+# make TUN device name if not set already
+if [[ $TUN_DEVICE == "" ]]; then
+	TUN_PREFIX="emu"
+	TUN_DEVICE="$TUN_PREFIX${INTERFACES//,/}"  # make joint name, removing commas from interface list
+fi
+
 # create TUN device
-TUN_PREFIX="emu"
-TUN_DEVICE="$TUN_PREFIX${INTERFACES//,/}"  # make joint name, removing commas from interface list
 TUN_DEVICE="${TUN_DEVICE:0:14}"  # truncate to 15 characters (IFNAMSIZ is 16 in Linux)
 echo "Creating TUN device $TUN_DEVICE for local packet manipulation..."
 socat tun,tun-name=$TUN_DEVICE,iff-up,iff-no-pi udp4-sendto:127.0.0.1:$IN_PORT,bind=127.0.0.1,sourceport=$OUT_PORT &

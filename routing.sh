@@ -91,7 +91,7 @@ if [[ $TUN_DEVICE == "" ]]; then
 fi
 
 # create TUN device
-TUN_DEVICE="${TUN_DEVICE:0:14}"  # truncate to 15 characters (IFNAMSIZ is 16 in Linux)
+TUN_DEVICE="${TUN_DEVICE:0:15}"  # truncate to 15 characters (IFNAMSIZ is 16 in Linux)
 echo "Creating TUN device $TUN_DEVICE for local packet manipulation..."
 socat tun,tun-name=$TUN_DEVICE,iff-up,iff-no-pi udp4-sendto:127.0.0.1:$IN_PORT,bind=127.0.0.1,sourceport=$OUT_PORT &
 SOCAT_PID=$!

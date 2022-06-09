@@ -15,7 +15,7 @@ The Bash script [routing.sh](routing.sh) uses [`socat`](http://www.dest-unreach.
 
 ### Network Topology
 
-An applicable network topology where Alice and Bob are connected via a router in the middle may look as follows:
+An applicable network topology where Alice and Bob are connected via some router in the middle looks as follows:
 
 ```
                              Router
@@ -28,17 +28,18 @@ An applicable network topology where Alice and Bob are connected via a router in
 +-----+                +----------------+                +-----+
 ```
 
-The script will create a TUN device `emueth0eth1` and route any packets received from `eth0` or `eth1` through that device, where the packets are wrapped in another UDP/IP packet and sent to a local port. Routing is set up conditionally to prevent a loop, i.e., packets traveling the opposite way from the TUN device to `eth0` or `eth1` do not get redirected again but can leave the system and reach the intended target.
+On the router, the script will create a TUN device `emueth0eth1` and route any packets received from `eth0` and `eth1` through that device, where the packets are wrapped in another UDP/IP packet and sent to a local port. Routing is set up conditionally to prevent an infinite loop, i.e., packets traveling the opposite way from the TUN device to `eth0` or `eth1` will not get redirected again and can leave the router.
 
 ### Usage
 
 Running the script without arguments yields the following usage info:
 
 ```
-Usage:   ./routing.sh INTERFACE IN_PORT OUT_PORT
+Usage:   ./routing.sh INTERFACE IN_PORT OUT_PORT [TUN_DEVICE]
          INTERFACES  Redirect packets coming in from these comma-separated network interfaces.
          IN_PORT     Local UDP port where incoming IP packets are sent to.
          OUT_PORT    Local UDP port where outgoing IP packets must be sent to.
+         TUN_DEVICE  Name of TUN device to create, up to 15 characters. (optional)
 Example: ./routing.sh eth0,eth1 1111 2222
 ```
 
@@ -52,13 +53,13 @@ IPv4 forwarding is enabled.
 Creating TUN device emueth0eth1 for local packet manipulation...
 socat running in background with PID 738321.
 IP in UDP/IP is passed to local port 1111 and expected back on local port 2222.
-Adding rule to handle packets from eth0...
-Adding rule to handle packets from eth1...
-Adding route to pass packets to emueth0eth1...
+Adding rule for table 100 to handle packets from eth0...
+Adding rule for table 100 to handle packets from eth1...
+Adding route to pass packets from table 100 to emueth0eth1...
 Ready. Running until SIGINT (Ctrl+C) is received.
 ```
 
-Let's say `eth0` has the subnet `10.0.1.0/24` assigned and `eth1` has subnet `10.0.2.0/24`. Alice is reachable by address `10.0.1.10` and Bob by `10.0.2.10`. The router in the middle uses addresses `10.0.1.1` and `10.0.2.1`. If Alice and Bob have set the router's addresses as their default gateway, a packet from Alice to Bob or from Bob to Alice will end up at the router. Now, if Alice pings Bob, her ICMP packets would arrive at the router on `eth0` and get passed through the TUN device to local UDP port 1111. If `socat` receives Alice's packets back on UDP port 2222, they will finally leave the router through `eth1` and reach Bob. The reverse path from Bob to Alice works the same way; packets come in on `eth1`, reach the emulator on port 1111, should be returned to port 2222 and leave through `eth0`.
+Let's say `eth0` has subnet `10.0.1.0/24` assigned and `eth1` has subnet `10.0.2.0/24`. Alice is reachable by address `10.0.1.10` and Bob by `10.0.2.10`. The router in the middle uses addresses `10.0.1.1` and `10.0.2.1`. If Alice and Bob have set the respective address of the router as their default gateway, a packet from Alice to Bob or from Bob to Alice will end up at the router. If Alice pings Bob, her ICMP packets arrive at the router on `eth0` and get passed by `socat` through the TUN device to local UDP port 1111. If `socat` receives Alice's packets back on UDP port 2222, they will finally leave the router through `eth1` and reach Bob. The reverse path from Bob to Alice works the same way; packets come in on `eth1`, reach the emulator on port 1111, should be returned to port 2222 and leave through `eth0`. Note that packets always reach the emulator on the same port regardless of their source, and they are expected back on the same port regardless of their destination.
 
 Pressing Ctrl+C will cause the script to undo the routing configuration and exit.
 
@@ -66,20 +67,21 @@ Pressing Ctrl+C will cause the script to undo the routing configuration and exit
 
 The script performs some environment and parameter checks at the beginning to avoid errors along the way. It will:
 
-1. check if it is run as root (future versions may use Linux capabilities instead);
-2. check that `socat` is available (or more precisely, can be found on $PATH);
-3. check if IPv4 forwarding is enabled (which will already be the case on machines set up as a router) and enable it if required;
-4. check that at least one network interface name to redirect traffic from is set, and that the specified interfaces do exist; and
-5. check that ports for incoming and outgoing packets are set.
+1. Check that it is run as root (future versions might use Linux capabilities instead);
+2. Check that `socat` is available (or more precisely, can be found on $PATH);
+3. Check that at least one network interface name to redirect traffic from is set, and that the specified interfaces do exist;
+4. Check that ports for incoming and outgoing packets are set;
+5. Check that the TUN device to be created does not exist yet; and
+6. Check that IPv4 forwarding is enabled (which will already be the case on machines set up as a router) and enable it if required.
 
-The name for the temporary TUN device is constructed from the inbound interface names (and truncated to 15 characters), providing some degree of uniqueness per interface configuration. Yet, currently, it is not possible to run multiple instances of the routing script concurrently because of a hard-coded routing table ID. This might be addressed in future versions.
+By default, the name for the temporary TUN device is constructed from the inbound interface names (and truncated to 15 characters), providing some degree of uniqueness per interface configuration. However, when running multiple instances of the routing script concurrently and the combined inbound interface names are too long, the truncated name is not unique anymore. In this case, specify a unique TUN device name to each instance by passing it as command line option.
 
 On exit, the script will reverse any routing changes made. However, if that fails due to an error in between, a blank state can always be reached by rebooting as the changes made by this script are not persistent.
 
 
 ## Emulator
 
-The emulator is meant to be run in a separate terminal after the routing has been set up. As of now, fixed per-packet delays, limited bandwidth and packet errors can be emulated. Note that the currently included Python3 script [emulator.py](emulator.py) serves as a minimal application example and placeholder for more sophisticated model-based emulation. Since asynchronous I/O using `asyncio` is a pain in Python and voids the purpose of providing an easy-to-understand example, the script reads and writes packets synchronously. Beware that this effectively creates a half-duplex first-in first-out link where incoming packets are only processed once the previous has left the emulator. Not being able to read a packet right when it arrives adds load-dependent delays (jitter); this will limit suitability for emulating low-latency connections. Improved asynchronous implementations may be included in the future.
+The emulator is meant to be run in a separate terminal after the routing has been set up. As of now, fixed per-packet delays, limited bandwidth and packet errors can be emulated. Note that the currently included Python3 script [emulator.py](emulator.py) serves as a minimal application example and placeholder for more sophisticated model-based emulation. Since asynchronous I/O using `asyncio` is a pain in Python and voids the purpose of providing an easy-to-understand example, the script reads and writes packets synchronously. Beware that this effectively creates a half-duplex first-in first-out link where incoming packets are only processed once the previous has left the emulator. Not being able to read a packet right when it arrives adds load-dependent delays (jitter); this will limit suitability for emulating low-latency connections. Improved asynchronous implementations might be included in the future.
 
 ### Usage
 
@@ -129,8 +131,6 @@ rtt min/avg/max/mdev = 101.249/102.601/103.261/0.381 ms
 
 Note that ICMP ping requests involve a round trip between two machines and pass the emulator twice. This is why the observed round trip time is about twice the configured emulator delay, and the observed loss is about equal to `1-(1-per)^2` since errors in either direction occur independently.
 
-### Caveats
+### Notes on Bandwidth Limits
 
-Bandwidth limits can be tested using [`iperf`](https://iperf.fr/), for example. Note that the configured bandwidth limit represents the sum bitrate of traffic in either direction. In other words, the bandwidth budget is split among all hosts communicating through the emulator. Considering two hosts, the actual achieved bitrate at the application level (which is what `iperf` reports) can be lower than the configured limit by about 10% mainly because of the protocol overhead (also remember that TCP sends ACKs in the opposite direction), but also because any other unwanted execution delays in the emulator are not being compensated.
-
-Further note that if a delay is configured, this will affect the achievable bandwidth (even if no bandwidth limit is set) because the emulator blocks incoming packets if another packet is waiting to be forwarded.
+Bandwidth limits can be tested using [`iperf`](https://iperf.fr/), for example. Note that the configured bandwidth limit represents the sum bitrate of traffic in either direction. In other words, the bandwidth budget is split among all hosts communicating through the emulator. Considering two hosts, the actual achieved bitrate at the application level (which is what `iperf` reports) can be lower than the configured limit by about 10%. Mainly because of protocol overhead, but also because unwanted execution delays in the emulator are not being compensated. Further note that if a delay is configured, this will affect the achievable bandwidth (even if no bandwidth limit is set) because the emulator does not process incoming packets if another packet is waiting to be forwarded.
